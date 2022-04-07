@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::{rc::Rc, num::ParseFloatError};
+use std::{rc::Rc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Keyword {
@@ -61,7 +61,7 @@ pub enum Token {
     // Unexpected content.
     Unknown,
     UnterminatedString,
-    InvalidNumber(ParseFloatError),
+    InvalidNumber,
 
     // End-of-file token.
     Eof,

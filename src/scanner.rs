@@ -1,8 +1,29 @@
 #![allow(dead_code)]
 
-use std::{str::{CharIndices}, rc::Rc};
+use std::{rc::Rc, str::CharIndices};
 
-use crate::{token::{Token, Keyword}, util::MultiPeekable};
+use phf::phf_map;
+
+use crate::{
+    token::{Keyword, Token},
+    util::MultiPeekable,
+};
+
+static KEYWORDS: phf::Map<&'static str, Keyword> = phf_map! {
+    "and" => Keyword::And,
+    "class" => Keyword::Class,
+    "else" => Keyword::Else,
+    "for" => Keyword::For,
+    "fun" => Keyword::Fun,
+    "if" => Keyword::If,
+    "or" => Keyword::Or,
+    "print" => Keyword::Print,
+    "return" => Keyword::Return,
+    "super" => Keyword::Super,
+    "this" => Keyword::This,
+    "var" => Keyword::Var,
+    "while" => Keyword::While,
+};
 
 #[derive(Debug, Clone)]
 pub struct Scanner<'a> {
@@ -23,49 +44,118 @@ impl<'a> Scanner<'a> {
     }
 
     /// Attempt to match against the next character. If it matched, consume it
-    /// and return Some(Some(index)) where the index is the byte offset of
-    /// the _subsequent_ character, or Some(None) if the consumed character
-    /// was the last one in the string.
-    fn match_char(&mut self, expected: char) -> Option<Option<usize>> {
+    /// and return a slice from the given start index up to and including the matched char.
+    fn match_char(&mut self, expected: char, start_index: usize) -> Option<&'a str> {
         self.position.peek().and_then(|(index, found_char)| {
             if found_char == expected {
                 let (next_index, next_char) = self.position.next().unwrap();
                 assert_eq!(next_index, index);
                 assert_eq!(next_char, found_char);
 
-                // Get the next character's index, if any, and return it.
-                Some(self.position.peek().map(|(idx, _)| idx))
+                // Get the next character's index, if any, and use it to slice.
+                match self.position.peek() {
+                    Some((boundary_idx, _)) => Some(&self.source[start_index..boundary_idx]),
+                    None => Some(&self.source[start_index..]),
+                }
             } else {
                 None
             }
         })
     }
 
-    fn new_lexeme_on_this_line(&self, token: Token, content: &'a str) -> Lexeme<'a> {
+    fn advance_until(&mut self, predicate: impl Fn(char) -> bool, start_index: usize) -> &'a str {
+        loop {
+            match self.position.peek() {
+                Some((index, c)) if predicate(c) => {
+                    break &self.source[start_index..index];
+                }
+                Some((_, c)) => {
+                    if c == '\n' {
+                        self.line_number += 1;
+                    }
+                    self.position.next().unwrap();
+                }
+                None => break &self.source[start_index..],
+            }
+        }
+    }
+
+    fn new_lexeme(&self, token: Token, content: &'a str) -> Lexeme<'a> {
         Lexeme::new(token, content, self.line_number)
     }
 
     fn new_identifier(&self, content: &'a str) -> Lexeme<'a> {
-        let token = match content {
-            "and" => Token::Keyword(Keyword::And),
-            "class" => Token::Keyword(Keyword::Class),
-            "else" => Token::Keyword(Keyword::Else),
-            "false" => Token::False,
-            "for" => Token::Keyword(Keyword::For),
-            "fun" => Token::Keyword(Keyword::Fun),
-            "if" => Token::Keyword(Keyword::If),
-            "nil" => Token::Nil,
-            "or" => Token::Keyword(Keyword::Or),
-            "print" => Token::Keyword(Keyword::Print),
-            "return" => Token::Keyword(Keyword::Return),
-            "super" => Token::Keyword(Keyword::Super),
-            "this" => Token::Keyword(Keyword::This),
-            "true" => Token::True,
-            "var" => Token::Keyword(Keyword::Var),
-            "while" => Token::Keyword(Keyword::While),
-            identifier => Token::Identifier(Rc::new(String::from(identifier))),
+        let token = KEYWORDS
+            .get(content)
+            .map(|keyword| Token::Keyword(*keyword))
+            .unwrap_or_else(|| match content {
+                // Handle literals that look like keywords, and handle identifiers.
+                "nil" => Token::Nil,
+                "false" => Token::False,
+                "true" => Token::True,
+                identifier => Token::Identifier(Rc::new(String::from(identifier))),
+            });
+        self.new_lexeme(token, content)
+    }
+
+    fn new_comment(&mut self) -> Lexeme<'a> {
+        let content = {
+            match self.position.peek() {
+                Some((comment_start_index, _)) => {
+                    let content = self.advance_until(|c| c == '\n', comment_start_index);
+
+                    // advance_until() doesn't munch the newline, so we need to munch it now.
+                    // There might not be a newline if we are at the end of the file, though.
+                    if let Some((_, c)) = self.position.next() {
+                        assert!(c == '\n');
+                        self.line_number += 1;
+                    }
+                    content
+                }
+                None => {
+                    // The comment started right at the end of the file,
+                    // so it has no content.
+                    ""
+                }
+            }
         };
-        self.new_lexeme_on_this_line(token, content)
+        self.new_lexeme(Token::Comment(Rc::new(content.to_string())), content)
+    }
+
+    fn new_string_literal(&mut self, opening_quote_index: usize) -> Lexeme<'a> {
+        let content = self.advance_until(|c| c == '"', opening_quote_index);
+
+        // Check if we found the closing quote or not.
+        match self.position.next() {
+            Some((_, '"')) => {
+                // The content doesn't include the closing quote, if one exists.
+                let string_value = &content[1..];
+                self.new_lexeme(
+                    Token::String(Rc::new(string_value.to_string())),
+                    string_value,
+                )
+            }
+            None => self.new_lexeme(Token::UnterminatedString, content),
+            _ => unreachable!(),
+        }
+    }
+
+    fn new_number_literal(&mut self, start_index: usize) -> Lexeme<'a> {
+        let mut content = self.advance_until(|c| !matches!(c, '0'..='9'), start_index);
+
+        let peek_two = (self.position.peek(), self.position.peek_nth(1));
+        if let (Some((_, '.')), Some((_, '0'..='9'))) = peek_two {
+            // Found a decimal point and a digit behind it, continue advancing.
+            let (_, dot) = self.position.next().unwrap(); // consume the '.'
+            assert_eq!(dot, '.');
+            content = self.advance_until(|c| !matches!(c, '0'..='9'), start_index);
+        }
+
+        let number = content.parse();
+        match number {
+            Ok(number) => self.new_lexeme(Token::Number(number), content),
+            Err(_) => self.new_lexeme(Token::InvalidNumber, content),
+        }
     }
 }
 
@@ -82,142 +172,66 @@ impl<'a> Iterator for Scanner<'a> {
             if let Some((start_index, start_char)) = maybe_next {
                 let content = &self.source[start_index..=start_index];
                 let maybe_lexeme = match start_char {
-                    '(' => Some(self.new_lexeme_on_this_line(Token::LeftParen, content)),
-                    ')' => Some(self.new_lexeme_on_this_line(Token::RightParen, content)),
-                    '{' => Some(self.new_lexeme_on_this_line(Token::LeftBrace, content)),
-                    '}' => Some(self.new_lexeme_on_this_line(Token::RightBrace, content)),
-                    ',' => Some(self.new_lexeme_on_this_line(Token::Comma, content)),
-                    '.' => Some(self.new_lexeme_on_this_line(Token::Dot, content)),
-                    '-' => Some(self.new_lexeme_on_this_line(Token::Minus, content)),
-                    '+' => Some(self.new_lexeme_on_this_line(Token::Plus, content)),
-                    ';' => Some(self.new_lexeme_on_this_line(Token::Semicolon, content)),
-                    '*' => Some(self.new_lexeme_on_this_line(Token::Star, content)),
+                    '(' => Some(self.new_lexeme(Token::LeftParen, content)),
+                    ')' => Some(self.new_lexeme(Token::RightParen, content)),
+                    '{' => Some(self.new_lexeme(Token::LeftBrace, content)),
+                    '}' => Some(self.new_lexeme(Token::RightBrace, content)),
+                    ',' => Some(self.new_lexeme(Token::Comma, content)),
+                    '.' => Some(self.new_lexeme(Token::Dot, content)),
+                    '-' => Some(self.new_lexeme(Token::Minus, content)),
+                    '+' => Some(self.new_lexeme(Token::Plus, content)),
+                    ';' => Some(self.new_lexeme(Token::Semicolon, content)),
+                    '*' => Some(self.new_lexeme(Token::Star, content)),
                     '!' => {
-                        if let Some(next_index) = self.match_char('=') {
-                            let content = slice_str(self.source, start_index, next_index);
-                            Some(self.new_lexeme_on_this_line(Token::BangEqual, content))
+                        if let Some(content) = self.match_char('=', start_index) {
+                            Some(self.new_lexeme(Token::BangEqual, content))
                         } else {
-                            Some(self.new_lexeme_on_this_line(Token::Bang, content))
+                            Some(self.new_lexeme(Token::Bang, content))
                         }
                     }
                     '=' => {
-                        if let Some(next_index) = self.match_char('=') {
-                            let content = slice_str(self.source, start_index, next_index);
-                            Some(self.new_lexeme_on_this_line(Token::EqualEqual, content))
+                        if let Some(content) = self.match_char('=', start_index) {
+                            Some(self.new_lexeme(Token::EqualEqual, content))
                         } else {
-                            Some(self.new_lexeme_on_this_line(Token::Equal, content))
+                            Some(self.new_lexeme(Token::Equal, content))
                         }
                     }
                     '<' => {
-                        if let Some(next_index) = self.match_char('=') {
-                            let content = slice_str(self.source, start_index, next_index);
-                            Some(self.new_lexeme_on_this_line(Token::LessEqual, content))
+                        if let Some(content) = self.match_char('=', start_index) {
+                            Some(self.new_lexeme(Token::LessEqual, content))
                         } else {
-                            Some(self.new_lexeme_on_this_line(Token::Less, content))
+                            Some(self.new_lexeme(Token::Less, content))
                         }
                     }
                     '>' => {
-                        if let Some(next_index) = self.match_char('=') {
-                            let content = slice_str(self.source, start_index, next_index);
-                            Some(self.new_lexeme_on_this_line(Token::GreaterEqual, content))
+                        if let Some(content) = self.match_char('=', start_index) {
+                            Some(self.new_lexeme(Token::GreaterEqual, content))
                         } else {
-                            Some(self.new_lexeme_on_this_line(Token::Greater, content))
+                            Some(self.new_lexeme(Token::Greater, content))
                         }
                     }
                     '/' => {
-                        if self.match_char('/').is_some() {
-                            let content = loop {
-                                match self.position.next() {
-                                    None => break &self.source[start_index..],
-                                    Some((end_index, '\n')) => {
-                                        self.line_number += 1;
-                                        break &self.source[start_index..end_index]
-                                    }
-                                    Some(_) => {},
-                                }
-                            };
-                            Some(self.new_lexeme_on_this_line(Token::Comment(Rc::new(content.to_string())), content))
+                        if self.match_char('/', start_index).is_some() {
+                            Some(self.new_comment())
                         } else {
-                            Some(self.new_lexeme_on_this_line(Token::Slash, content))
+                            Some(self.new_lexeme(Token::Slash, content))
                         }
                     }
-                    '"' => {
-                        let (content, terminating_index) = loop {
-                            match self.position.next() {
-                                None => break (&self.source[start_index..], None),
-                                Some((_, '\n')) => self.line_number += 1,
-                                Some((end_index, '"')) => break (&self.source[start_index..=end_index], Some(end_index)),
-                                Some(_) => {},
-                            }
-                        };
-                        if let Some(terminating_index) = terminating_index {
-                            let string_value = self.source[start_index + 1..terminating_index].to_string();
-                            Some(self.new_lexeme_on_this_line(Token::String(Rc::new(string_value)), content))
-                        } else {
-                            Some(self.new_lexeme_on_this_line(Token::UnterminatedString, content))
-                        }
-                    }
-                    '0'..='9' => {
-                        let maybe_exclusive_end_index = loop {
-                            match self.position.peek() {
-                                None => {
-                                    break None;
-                                }
-                                Some((_, '0'..='9')) => {
-                                    self.position.next().unwrap();
-                                }
-                                Some((index, '.')) => {
-                                    if matches!(self.position.peek_nth(1), Some((_, '0'..='9'))) {
-                                        self.position.next().unwrap();  // consume the '.'
-                                        self.position.next().unwrap();  // consume the first digit
-                                        break loop {
-                                            if let Some((index, c)) = self.position.peek() {
-                                                if matches!(c, '0'..='9') {
-                                                    self.position.next().unwrap();
-                                                } else {
-                                                    break Some(index);
-                                                }
-                                            } else {
-                                                break None;
-                                            }
-                                        }
-                                    } else {
-                                        // We found a period not followed by a digit.
-                                        // The period should be its own lexeme.
-                                        break Some(index);
-                                    }
-                                }
-                                Some((index, _)) => {
-                                    // We found a non-numeric character, so end the number lexeme.
-                                    break Some(index);
-                                }
-                            }
-                        };
-
-                        let content = slice_str(self.source, start_index, maybe_exclusive_end_index);
-                        let number = content.parse();
-                        match number {
-                            Ok(number) => Some(self.new_lexeme_on_this_line(Token::Number(number), content)),
-                            Err(e) => Some(self.new_lexeme_on_this_line(Token::InvalidNumber(e), content)),
-                        }
-                    }
+                    '"' => Some(self.new_string_literal(start_index)),
+                    '0'..='9' => Some(self.new_number_literal(start_index)),
                     'a'..='z' | 'A'..='Z' | '_' => {
-                        let maybe_exclusive_end_index = loop {
-                            if matches!(self.position.peek(), Some((_, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'))) {
-                                self.position.next().unwrap();
-                            } else {
-                                break self.position.peek().map(|(index, _)| index);
-                            }
-                        };
-                        let content = slice_str(self.source, start_index, maybe_exclusive_end_index);
+                        let content = self.advance_until(
+                            |c| !matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'),
+                            start_index,
+                        );
                         Some(self.new_identifier(content))
                     }
-                    ' ' | '\r' | '\t' => None,  // ignore whitespace chars
+                    ' ' | '\r' | '\t' => None, // ignore whitespace chars
                     '\n' => {
                         self.line_number += 1;
                         None
                     }
-                    _ => Some(self.new_lexeme_on_this_line(Token::Unknown, content)),
+                    _ => Some(self.new_lexeme(Token::Unknown, content)),
                 };
 
                 // If we found a lexeme, return it. If not, keep looking.
@@ -225,18 +239,11 @@ impl<'a> Iterator for Scanner<'a> {
                     break Some(lexeme);
                 }
             } else {
-                let eof_lexeme = Lexeme::eof(self.line_number);
+                let eof_lexeme = Lexeme::new(Token::Eof, "", self.line_number);
                 self.finished = true;
                 break Some(eof_lexeme);
             }
         }
-    }
-}
-
-fn slice_str(content: &str, start_index: usize, maybe_exclusive_end_index: Option<usize>) -> &str {
-    match maybe_exclusive_end_index {
-        Some(exclusive_end_index) => &content[start_index..exclusive_end_index],
-        None => &content[start_index..],
     }
 }
 
@@ -249,11 +256,9 @@ pub struct Lexeme<'a> {
 impl<'a> Lexeme<'a> {
     fn new(token: Token, content: &'a str, line: usize) -> Self {
         Self {
-            token, content, line,
+            token,
+            content,
+            line,
         }
-    }
-
-    fn eof(line: usize) -> Self {
-        Lexeme::new(Token::Eof, "", line)
     }
 }
