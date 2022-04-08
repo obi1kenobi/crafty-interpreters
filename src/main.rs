@@ -1,3 +1,4 @@
+mod expr;
 mod token;
 mod scanner;
 mod util;

@@ -2,7 +2,9 @@
 
 use std::{rc::Rc};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Keyword {
     And,
     Class,
@@ -19,7 +21,7 @@ pub enum Keyword {
     While,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Token {
     // Guaranteed single-character tokens.
     LeftParen,
