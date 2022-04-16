@@ -1,14 +1,22 @@
 #![allow(dead_code)]
 
-use std::{fmt::Debug, cmp::Ordering};
+use std::{cmp::Ordering, fmt::Debug};
 
 #[derive(Debug, Clone)]
-pub struct MultiPeekable<I, const N: usize> where I: Iterator, I::Item: Default + Debug + Copy {
+pub struct MultiPeekable<I, const N: usize>
+where
+    I: Iterator,
+    I::Item: Default + Debug + Copy,
+{
     buffer: CircularBuffer<Option<I::Item>, N>,
     iter: I,
 }
 
-impl<I, const N: usize> MultiPeekable<I, N> where I: Iterator, I::Item: Default + Debug + Copy {
+impl<I, const N: usize> MultiPeekable<I, N>
+where
+    I: Iterator,
+    I::Item: Default + Debug + Copy,
+{
     pub fn new(iter: I) -> Self {
         Self {
             buffer: Default::default(),
@@ -23,18 +31,25 @@ impl<I, const N: usize> MultiPeekable<I, N> where I: Iterator, I::Item: Default 
     pub fn peek_nth(&mut self, n: usize) -> Option<I::Item> {
         assert!(n < N);
 
-        if self.buffer.len() < n + 1 {  // n is 0-indexed but length is 1-indexed
+        if self.buffer.len() < n + 1 {
+            // n is 0-indexed but length is 1-indexed
             let need_to_push = n + 1 - self.buffer.len();
             for _ in 0..need_to_push {
                 self.buffer.push(self.iter.next());
             }
         }
 
-        self.buffer.get_nth(n).expect("getting nth element from already-loaded peek buffer")
+        self.buffer
+            .get_nth(n)
+            .expect("getting nth element from already-loaded peek buffer")
     }
 }
 
-impl<I, const N: usize> Iterator for MultiPeekable<I, N> where I: Iterator, I::Item: Default + Debug + Copy {
+impl<I, const N: usize> Iterator for MultiPeekable<I, N>
+where
+    I: Iterator,
+    I::Item: Default + Debug + Copy,
+{
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -51,7 +66,7 @@ struct CircularBuffer<T: Default + Debug + Copy, const N: usize> {
     buffer: [T; N],
     start: usize,
     end: usize,
-    cycled: bool,  // true when start == end indicates a full buffer, false when empty buffer
+    cycled: bool, // true when start == end indicates a full buffer, false when empty buffer
 }
 
 impl<T: Default + Debug + Copy, const N: usize> CircularBuffer<T, N> {
@@ -103,11 +118,13 @@ impl<T: Default + Debug + Copy, const N: usize> CircularBuffer<T, N> {
     fn len(&self) -> usize {
         match self.end.cmp(&self.start) {
             Ordering::Less => self.end + N - self.start,
-            Ordering::Equal => if self.cycled {
-                N
-            } else {
-                0
-            },
+            Ordering::Equal => {
+                if self.cycled {
+                    N
+                } else {
+                    0
+                }
+            }
             Ordering::Greater => self.end - self.start,
         }
     }

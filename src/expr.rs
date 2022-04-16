@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::token::Token;
 
@@ -22,13 +22,13 @@ pub enum Literal {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UnaryExpr {
-    operator: Token,
-    right: Expr,
+    pub operator: Token,
+    pub right: Expr,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BinaryExpr {
-    left: Expr,
-    operator: Token,
-    right: Expr,
+    pub left: Expr,
+    pub operator: Token,
+    pub right: Expr,
 }

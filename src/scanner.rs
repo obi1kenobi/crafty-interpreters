@@ -248,9 +248,9 @@ impl<'a> Iterator for Scanner<'a> {
 }
 
 pub struct Lexeme<'a> {
-    token: Token,
-    content: &'a str,
-    line: usize,
+    pub token: Token,
+    pub content: &'a str,
+    pub line: usize,
 }
 
 impl<'a> Lexeme<'a> {

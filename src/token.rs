@@ -1,8 +1,8 @@
 #![allow(dead_code)]
 
-use std::{rc::Rc};
+use std::rc::Rc;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Keyword {
@@ -44,7 +44,7 @@ pub enum Token {
     GreaterEqual,
     Less,
     LessEqual,
-    Slash,  // Double slash means the start of a comment, so we don't emit a '//' token by itself.
+    Slash, // Double slash means the start of a comment, so we don't emit a '//' token by itself.
 
     // Literals.
     Identifier(Rc<String>),
