@@ -1,13 +1,14 @@
 use std::rc::Rc;
 
-use serde::{Serialize, Deserialize};
+use derive_new::new;
+use serde::{Deserialize, Serialize};
 
 use crate::expr::Literal;
 
-const NIL_TYPE: &'static str = "nil";
-const BOOLEAN_TYPE: &'static str = "bool";
-const NUMBER_TYPE: &'static str = "number";
-const STRING_TYPE: &'static str = "string";
+const NIL_TYPE: &str = "nil";
+const BOOLEAN_TYPE: &str = "bool";
+const NUMBER_TYPE: &str = "number";
+const STRING_TYPE: &str = "string";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Nil;
@@ -17,7 +18,7 @@ pub enum Value {
     Nil,
     Boolean(bool),
     Number(f64),
-    String(Rc<String>),
+    String(Rc<str>),
 }
 
 impl From<Literal> for Value {
@@ -35,8 +36,8 @@ impl From<&Literal> for Value {
     fn from(literal: &Literal) -> Self {
         match literal {
             Literal::Nil => Self::Nil,
-            Literal::Boolean(b) => Self::Boolean(b),
-            Literal::Number(n) => Self::Number(n),
+            Literal::Boolean(b) => Self::Boolean(*b),
+            Literal::Number(n) => Self::Number(*n),
             Literal::String(s) => Self::String(s.clone()),
         }
     }
@@ -54,14 +55,14 @@ impl From<f64> for Value {
     }
 }
 
-impl From<Rc<String>> for Value {
-    fn from(s: Rc<String>) -> Self {
+impl From<Rc<str>> for Value {
+    fn from(s: Rc<str>) -> Self {
         Self::String(s)
     }
 }
 
-impl From<&Rc<String>> for Value {
-    fn from(s: &Rc<String>) -> Self {
+impl From<&Rc<str>> for Value {
+    fn from(s: &Rc<str>) -> Self {
         Self::String(s.clone())
     }
 }
@@ -76,6 +77,17 @@ impl From<Nil> for Value {
 pub struct ConversionError {
     converting_value: Value,
     to_type: &'static str,
+}
+
+impl TryFrom<&Value> for Nil {
+    type Error = ConversionError;
+
+    fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        match value {
+            Value::Nil => Ok(Nil),
+            _ => Err(ConversionError::new(value.clone(), NIL_TYPE)),
+        }
+    }
 }
 
 impl TryFrom<&Value> for bool {
@@ -100,24 +112,13 @@ impl TryFrom<&Value> for f64 {
     }
 }
 
-impl TryFrom<&Value> for Rc<String> {
+impl TryFrom<&Value> for Rc<str> {
     type Error = ConversionError;
 
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         match value {
             Value::String(s) => Ok(s.clone()),
             _ => Err(ConversionError::new(value.clone(), STRING_TYPE)),
-        }
-    }
-}
-
-impl TryFrom<&Value> for Nil {
-    type Error = ConversionError;
-
-    fn try_from(value: &Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Nil => Ok(Nil),
-            _ => Err(ConversionError::new(value.clone(), NIL_TYPE)),
         }
     }
 }

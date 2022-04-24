@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::{iter::Peekable};
+use std::iter::Peekable;
 
 use serde::{Deserialize, Serialize};
 

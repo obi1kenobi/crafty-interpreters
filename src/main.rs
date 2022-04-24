@@ -7,6 +7,7 @@ mod parser;
 mod scanner;
 mod token;
 mod util;
+pub mod value;
 
 fn main() {
     let content = r#"

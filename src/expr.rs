@@ -1,4 +1,4 @@
-use std::{rc::Rc};
+use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
@@ -45,7 +45,7 @@ pub enum Literal {
     Nil,
     Boolean(bool),
     Number(f64),
-    String(Rc<String>),
+    String(Rc<str>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

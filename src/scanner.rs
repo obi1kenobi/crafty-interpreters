@@ -93,7 +93,7 @@ impl<'a> Scanner<'a> {
                 "nil" => Token::Nil,
                 "false" => Token::False,
                 "true" => Token::True,
-                identifier => Token::Identifier(Rc::new(String::from(identifier))),
+                identifier => Token::Identifier(Rc::from(String::from(identifier))),
             });
         self.new_lexeme(token, content)
     }
@@ -119,7 +119,7 @@ impl<'a> Scanner<'a> {
                 }
             }
         };
-        self.new_lexeme(Token::Comment(Rc::new(content.to_string())), content)
+        self.new_lexeme(Token::Comment(Rc::from(content)), content)
     }
 
     fn new_string_literal(&mut self, opening_quote_index: usize) -> Lexeme<'a> {
@@ -130,10 +130,7 @@ impl<'a> Scanner<'a> {
             Some((_, '"')) => {
                 // The content doesn't include the closing quote, if one exists.
                 let string_value = &content[1..];
-                self.new_lexeme(
-                    Token::String(Rc::new(string_value.to_string())),
-                    string_value,
-                )
+                self.new_lexeme(Token::String(Rc::from(string_value)), string_value)
             }
             None => self.new_lexeme(Token::UnterminatedString, content),
             _ => unreachable!(),

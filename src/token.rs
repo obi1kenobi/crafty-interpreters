@@ -47,8 +47,8 @@ pub enum Token {
     Slash, // Double slash means the start of a comment, so we don't emit a '//' token by itself.
 
     // Literals.
-    Identifier(Rc<String>),
-    String(Rc<String>),
+    Identifier(Rc<str>),
+    String(Rc<str>),
     Number(f64),
     True,
     False,
@@ -58,7 +58,7 @@ pub enum Token {
     Keyword(Keyword),
 
     // Comments.
-    Comment(Rc<String>),
+    Comment(Rc<str>),
 
     // Unexpected content.
     Unknown,
