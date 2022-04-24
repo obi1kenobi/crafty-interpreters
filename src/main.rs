@@ -10,7 +10,7 @@ mod util;
 
 fn main() {
     let content = r#"
-        123.456 + "abc" * (17 * 123) == nil
+        true and !false and !(false and true) == 123 + 45 * 2
     "#;
     let scanner = Scanner::new(content);
     let mut parser = Parser::new(scanner);

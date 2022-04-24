@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::iter::Peekable;
+use std::{iter::Peekable};
 
 use serde::{Deserialize, Serialize};
 
@@ -144,8 +144,17 @@ where
         binary_expression_impl!(
             self,
             tokens,
-            term,
+            logical,
             Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual
+        )
+    }
+
+    fn logical(&mut self) -> Result<Expr, ParseError> {
+        binary_expression_impl!(
+            self,
+            tokens,
+            term,
+            Token::Keyword(Keyword::And | Keyword::Or)
         )
     }
 
