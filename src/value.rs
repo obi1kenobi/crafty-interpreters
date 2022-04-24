@@ -1,24 +1,90 @@
-use std::rc::Rc;
+use std::{rc::Rc, error::Error, fmt::Display};
 
-use derive_new::new;
 use serde::{Deserialize, Serialize};
 
 use crate::expr::Literal;
 
-const NIL_TYPE: &str = "nil";
-const BOOLEAN_TYPE: &str = "bool";
-const NUMBER_TYPE: &str = "number";
-const STRING_TYPE: &str = "string";
+pub const NIL_TYPE: &str = "nil";
+pub const BOOLEAN_TYPE: &str = "bool";
+pub const NUMBER_TYPE: &str = "number";
+pub const STRING_TYPE: &str = "string";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Nil;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Value {
     Nil,
     Boolean(bool),
     Number(f64),
     String(Rc<str>),
+}
+
+impl Value {
+    pub fn as_number(&self) -> Option<f64> {
+        match self {
+            Value::Number(n) => Some(*n),
+            _ => None
+        }
+    }
+
+    pub fn as_bool(&self) -> bool {
+        match self {
+            Value::Boolean(b) => *b,
+            Value::Nil => false,
+            _ => true,
+        }
+    }
+
+    pub fn as_rc_str(&self) -> Option<&Rc<str>> {
+        match self {
+            Value::String(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Value::String(s) => Some(s.as_ref()),
+            _ => None
+        }
+    }
+
+    pub fn as_nil(&self) -> Option<Nil> {
+        match self {
+            Value::Nil => Some(Nil),
+            _ => None,
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Boolean(l0), Self::Boolean(r0)) => l0 == r0,
+            (Self::Number(l0), Self::Number(r0)) => {
+                // We diverge with IEEE 754 here to comply with the lox language spec.
+                (l0 == r0) || (l0.is_nan() && r0.is_nan())
+            }
+            (Self::String(l0), Self::String(r0)) => l0 == r0,
+            _ => core::mem::discriminant(self) == core::mem::discriminant(other),
+        }
+    }
+}
+
+impl Eq for Value {}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Nil => write!(f, "nil"),
+            Value::Boolean(b) => b.fmt(f),
+            Value::Number(n) => {
+                n.fmt(f)
+            },
+            Value::String(s) => write!(f, "\"{}\"", s.as_ref()),
+        }
+    }
 }
 
 impl From<Literal> for Value {
@@ -73,31 +139,62 @@ impl From<Nil> for Value {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, new)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, derive_new::new)]
 pub struct ConversionError {
-    converting_value: Value,
-    to_type: &'static str,
+    converting_from: Value,
+    kind: ConversionErrorKind
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ConversionErrorKind {
+    ConversionToString,
+    ConversionToNumber,
+    ConversionToNil,
+}
+
+impl ConversionErrorKind {
+    pub fn conversion_to(&self) -> &'static str {
+        match self {
+            Self::ConversionToString => STRING_TYPE,
+            Self::ConversionToNumber => NUMBER_TYPE,
+            Self::ConversionToNil => NIL_TYPE,
+        }
+    }
+}
+
+impl Display for ConversionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Could not coerce value {} to {}", self.converting_from, self.kind.conversion_to())
+    }
+}
+
+impl Error for ConversionError {}
 
 impl TryFrom<&Value> for Nil {
     type Error = ConversionError;
 
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Nil => Ok(Nil),
-            _ => Err(ConversionError::new(value.clone(), NIL_TYPE)),
+        match value.as_nil() {
+            Some(x) => Ok(x),
+            None => Err(ConversionError::new(value.clone(), ConversionErrorKind::ConversionToNil)),
         }
     }
 }
 
-impl TryFrom<&Value> for bool {
+impl TryFrom<Value> for Nil {
     type Error = ConversionError;
 
-    fn try_from(value: &Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Boolean(b) => Ok(*b),
-            _ => Err(ConversionError::new(value.clone(), BOOLEAN_TYPE)),
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value.as_nil() {
+            Some(x) => Ok(x),
+            _ => Err(ConversionError::new(value, ConversionErrorKind::ConversionToNil)),
         }
+    }
+}
+
+impl From<&Value> for bool {
+    fn from(v: &Value) -> Self {
+        v.as_bool()
     }
 }
 
@@ -105,9 +202,20 @@ impl TryFrom<&Value> for f64 {
     type Error = ConversionError;
 
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
-        match value {
-            Value::Number(n) => Ok(*n),
-            _ => Err(ConversionError::new(value.clone(), NUMBER_TYPE)),
+        match value.as_number() {
+            Some(n) => Ok(n),
+            None => Err(ConversionError::new(value.clone(), ConversionErrorKind::ConversionToNumber)),
+        }
+    }
+}
+
+impl TryFrom<Value> for f64 {
+    type Error = ConversionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        match value.as_number() {
+            Some(n) => Ok(n),
+            None => Err(ConversionError::new(value, ConversionErrorKind::ConversionToNumber)),
         }
     }
 }
@@ -116,9 +224,21 @@ impl TryFrom<&Value> for Rc<str> {
     type Error = ConversionError;
 
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
+        match value.as_rc_str() {
+            Some(s) => Ok(s.clone()),
+            None => Err(ConversionError::new(value.clone(), ConversionErrorKind::ConversionToString)),
+        }
+    }
+}
+
+impl TryFrom<Value> for Rc<str> {
+    type Error = ConversionError;
+
+    fn try_from(value: Value) -> Result<Self, Self::Error> {
+        // this converts directly to avoid an extraneous clone of the Rc
         match value {
-            Value::String(s) => Ok(s.clone()),
-            _ => Err(ConversionError::new(value.clone(), STRING_TYPE)),
+            Value::String(s) => Ok(s),
+            _ => Err(ConversionError::new(value, ConversionErrorKind::ConversionToString)),
         }
     }
 }

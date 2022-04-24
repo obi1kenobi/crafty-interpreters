@@ -4,34 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::token::Token;
 
-pub trait Visitable {
-    fn accept<V: Visitor>(visitor: V) -> Option<V::Output>;
-}
-
-pub trait Visitor {
-    type Output;
-
-    fn visit_expr(_expr: Expr) -> Option<Self::Output> {
-        None
-    }
-
-    fn visit_literal(_literal: Literal) -> Option<Self::Output> {
-        None
-    }
-
-    fn visit_unary(_unary: UnaryExpr) -> Option<Self::Output> {
-        None
-    }
-
-    fn visit_binary(_binary: BinaryExpr) -> Option<Self::Output> {
-        None
-    }
-
-    fn visit_grouping(_grouping: Expr) -> Option<Self::Output> {
-        None
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Expr {
     Binary(Box<BinaryExpr>),
