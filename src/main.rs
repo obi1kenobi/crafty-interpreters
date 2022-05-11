@@ -26,7 +26,7 @@ fn main() {
 
     if let Ok(expr) = parse_outcome {
         let mut interpreter = Interpreter::new();
-        let eval_outcome = interpreter.evaluate(&expr);
+        let eval_outcome = interpreter.evaluate_expr(&expr);
         match eval_outcome {
             Ok(val) => println!("output: {}", val),
             Err(e) => println!("error: {}", e),

@@ -1,4 +1,4 @@
-use std::{rc::Rc, fmt::Display};
+use std::{cell::RefCell, collections::BTreeMap, fmt::Display, rc::Rc};
 
 use serde::{Deserialize, Serialize};
 
@@ -8,20 +8,59 @@ use crate::{
     value::{ConversionError, Value},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, derive_new::new)]
 pub struct Interpreter {
     #[new(default)]
-    environment: Environment,
+    globals: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
-        expr.eval(&mut self.environment)
+    pub fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
+        expr.eval(&mut self.globals.borrow_mut())
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct Environment {}
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, derive_new::new)]
+pub struct Environment {
+    enclosing: Option<Rc<RefCell<Environment>>>,
+    bindings: BTreeMap<Rc<str>, Value>,
+}
+
+impl Environment {
+    fn get(&self, name: &str) -> Option<Value> {
+        let maybe_value = self.bindings.get(name);
+        if maybe_value.is_some() {
+            maybe_value.map(|x| x.to_owned())
+        } else if let Some(enclosing) = &self.enclosing {
+            enclosing.borrow().get(name)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn resolve(&self, name: &str) -> Result<Value, RuntimeError> {
+        self.get(name)
+            .ok_or_else(|| RuntimeError::new(RuntimeErrorKind::UndefinedVariable(name.to_owned())))
+    }
+
+    pub(crate) fn define(&mut self, name: Rc<str>, value: Value) {
+        self.bindings.insert(name, value);
+    }
+
+    pub(crate) fn assign(&mut self, name: &str, value: Value) -> Result<(), RuntimeError> {
+        let maybe_value = self.bindings.get_mut(name);
+        if let Some(v) = maybe_value {
+            *v = value;
+            Ok(())
+        } else if let Some(enclosing) = &self.enclosing {
+            enclosing.borrow_mut().assign(name, value)
+        } else {
+            Err(RuntimeError::new(RuntimeErrorKind::UndefinedVariable(
+                name.to_owned(),
+            )))
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, derive_new::new)]
 pub struct RuntimeError {
@@ -44,6 +83,9 @@ pub enum RuntimeErrorKind {
         but was used with values {1} and {2}"
     )]
     ExpectedMatchingNumbersOrStringsForOperator(Token, Value, Value),
+
+    #[error("Undefined variable: {0}")]
+    UndefinedVariable(String),
 }
 
 impl Display for RuntimeError {
