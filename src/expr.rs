@@ -10,6 +10,8 @@ pub enum Expr {
     Grouping(Box<Expr>),
     Literal(Literal),
     Unary(Box<UnaryExpr>),
+    Identifier(Rc<str>),
+    Assignment(Rc<str>, Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

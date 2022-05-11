@@ -9,6 +9,7 @@ mod token;
 mod util;
 pub mod value;
 pub mod interpreter;
+pub mod stmt;
 
 fn main() {
     let content = r#"

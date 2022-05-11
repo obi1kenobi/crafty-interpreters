@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     expr::{BinaryExpr, Expr, Literal, UnaryExpr},
     token::{Keyword, Token},
-    value::{ConversionError, Value},
+    value::{ConversionError, Value}, stmt::Stmt,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, derive_new::new)]
@@ -17,6 +17,10 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         expr.eval(&mut self.globals.borrow_mut())
+    }
+
+    pub fn evaluate_stmt(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+        stmt.eval(&mut self.globals.borrow_mut()).map(|_| ())
     }
 }
 
@@ -124,6 +128,12 @@ impl Evaluate for Expr {
             Expr::Grouping(inner) => inner.eval(env),
             Expr::Literal(inner) => inner.eval(env),
             Expr::Binary(inner) => inner.eval(env),
+            Expr::Identifier(ident) => env.resolve(ident.as_ref()),
+            Expr::Assignment(ident, expr) => {
+                let value = expr.eval(env)?;
+                env.assign(ident.as_ref(), value.clone())?;
+                Ok(value)
+            }
         }
     }
 }
@@ -232,6 +242,30 @@ impl Evaluate for BinaryExpr {
                 "operator {:?} used in BinaryExpr: {:?}",
                 self.operator, self
             ),
+        }
+    }
+}
+
+impl Evaluate for Stmt {
+    fn eval(&self, env: &mut Environment) -> Result<Value, RuntimeError> {
+        match self {
+            Stmt::Print(expr) => {
+                let value = expr.eval(env)?;
+                println!("{value}");
+                Ok(Value::Nil)
+            }
+            Stmt::Expression(expr) => {
+                expr.eval(env).map(|_| Value::Nil)
+            }
+            Stmt::VarDeclaration(decl) => {
+                let initial_value = if let Some(initializer) = &decl.initializer {
+                    initializer.eval(env)?
+                } else {
+                    Value::Nil
+                };
+                env.define(decl.name.clone(), initial_value);
+                Ok(Value::Nil)
+            }
         }
     }
 }
