@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::BTreeMap, fmt::Display, rc::Rc};
+use std::{cell::RefCell, collections::BTreeMap, fmt::Display, rc::Rc, ops::{Deref}};
 
 use serde::{Deserialize, Serialize};
 
@@ -11,26 +11,52 @@ use crate::{
 #[derive(Debug, Clone, Serialize, Deserialize, Default, derive_new::new)]
 pub struct Interpreter {
     #[new(default)]
-    globals: Rc<RefCell<Environment>>,
+    globals: Environment,
 }
 
 impl Interpreter {
     pub fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
-        expr.eval(&mut self.globals.borrow_mut())
+        expr.eval(&mut self.globals)
     }
 
     pub fn evaluate_stmt(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
-        stmt.eval(&mut self.globals.borrow_mut()).map(|_| ())
+        stmt.eval(&mut self.globals).map(|_| ())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, derive_new::new)]
-pub struct Environment {
-    enclosing: Option<Rc<RefCell<Environment>>>,
-    bindings: BTreeMap<Rc<str>, Value>,
+pub struct Environment(Rc<RefCell<RawEnvironment>>);
+
+impl Deref for Environment {
+    type Target = RefCell<RawEnvironment>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl From<RawEnvironment> for Environment {
+    fn from(raw_env: RawEnvironment) -> Self {
+        Self(Rc::new(RefCell::new(raw_env)))
+    }
 }
 
 impl Environment {
+    pub(crate) fn new_nested(&self) -> Self {
+        let raw_env = RawEnvironment::new(Some(self.clone()));
+        Self::from(raw_env)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, derive_new::new)]
+pub struct RawEnvironment {
+    enclosing: Option<Environment>,
+
+    #[new(default)]
+    bindings: BTreeMap<Rc<str>, Value>,
+}
+
+impl RawEnvironment {
     fn get(&self, name: &str) -> Option<Value> {
         let maybe_value = self.bindings.get(name);
         if maybe_value.is_some() {
@@ -128,10 +154,10 @@ impl Evaluate for Expr {
             Expr::Grouping(inner) => inner.eval(env),
             Expr::Literal(inner) => inner.eval(env),
             Expr::Binary(inner) => inner.eval(env),
-            Expr::Identifier(ident) => env.resolve(ident.as_ref()),
+            Expr::Identifier(ident) => env.borrow().resolve(ident.as_ref()),
             Expr::Assignment(ident, expr) => {
                 let value = expr.eval(env)?;
-                env.assign(ident.as_ref(), value.clone())?;
+                env.borrow_mut().assign(ident.as_ref(), value.clone())?;
                 Ok(value)
             }
         }
@@ -263,7 +289,14 @@ impl Evaluate for Stmt {
                 } else {
                     Value::Nil
                 };
-                env.define(decl.name.clone(), initial_value);
+                env.borrow_mut().define(decl.name.clone(), initial_value);
+                Ok(Value::Nil)
+            }
+            Stmt::Block(inner_stmts) => {
+                let mut inner_env = env.new_nested();
+                for stmt in inner_stmts {
+                    stmt.eval(&mut inner_env)?;
+                }
                 Ok(Value::Nil)
             }
         }

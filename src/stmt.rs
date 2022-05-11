@@ -9,6 +9,7 @@ pub enum Stmt {
     Print(Expr),
     Expression(Expr),
     VarDeclaration(VarDeclaration),
+    Block(Vec<Stmt>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, derive_new::new)]
