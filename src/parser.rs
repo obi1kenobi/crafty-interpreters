@@ -35,6 +35,9 @@ pub enum ParseErrorKind {
     #[error("Expected ')' after expression.")]
     ExpectedRightParenAfterExpr,
 
+    #[error("Expected '}}' after block.")]
+    ExpectedRightBraceAfterBlock,
+
     #[error("Expected expression.")]
     ExpectedExpression,
 
@@ -224,7 +227,20 @@ where
                 Ok(Stmt::Print(expr))
             }
             Token::LeftBrace => {
-                todo!()
+                self.tokens.next().expect("peeked item already consumed");
+                let mut inner_statements = vec![];
+
+                loop {
+                    let peeked_token = &self.tokens.peek().expect("skipped past EOF token").token;
+                    if peeked_token == &Token::RightBrace || peeked_token == &Token::Eof {
+                        break peeked_token;
+                    }
+                    inner_statements.push(self.declaration()?);
+                };
+
+                self.ensure_next_token(Token::RightBrace, ParseErrorKind::ExpectedRightBraceAfterBlock)?;
+
+                Ok(Stmt::Block(inner_statements))
             }
             _ => {
                 let expr = self.expression()?;
