@@ -13,7 +13,7 @@ pub mod stmt;
 
 fn main() {
     let content = r#"
-        true and !false and !(false and true) == 123 + 45 * 2 + "bar"
+        print true and !false and !(false and true) != 123 + 45 * 2;
     "#;
     let scanner = Scanner::new(content);
     let mut parser = Parser::new(scanner);
@@ -25,12 +25,14 @@ fn main() {
         ron::ser::to_string_pretty(&parse_outcome, PrettyConfig::new()).unwrap()
     );
 
-    if let Ok(expr) = parse_outcome {
+    if let Ok(program) = parse_outcome {
         let mut interpreter = Interpreter::new();
-        let eval_outcome = interpreter.evaluate_expr(&expr);
-        match eval_outcome {
-            Ok(val) => println!("output: {}", val),
-            Err(e) => println!("error: {}", e),
+        for statement in &program {
+            let outcome = interpreter.evaluate_stmt(statement);
+            if let Err(e) = outcome {
+                println!("error: {e}");
+                break;
+            }
         }
     }
 }

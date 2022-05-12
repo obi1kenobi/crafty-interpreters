@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     expr::{BinaryExpr, Expr, Literal, UnaryExpr},
     scanner::Lexeme,
-    token::{Keyword, Token},
+    token::{Keyword, Token}, stmt::Stmt,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,6 +28,7 @@ impl ParseError {
 }
 
 #[non_exhaustive]
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, thiserror::Error)]
 pub enum ParseErrorKind {
     #[error("Expected ')' after expression.")]
@@ -35,6 +36,9 @@ pub enum ParseErrorKind {
 
     #[error("Expected expression.")]
     ExpectedExpression,
+
+    #[error("Expected ';' at the end of the statement.")]
+    ExpectedSemicolon,
 }
 
 pub struct Parser<'a, I>
@@ -82,8 +86,8 @@ where
         }
     }
 
-    pub fn parse(&mut self) -> Result<Expr, ParseError> {
-        self.expression()
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        self.program()
     }
 
     fn synchronize(&mut self) {
@@ -124,6 +128,41 @@ where
             Ok(())
         } else {
             Err(ParseError::new(error_on_mismatch, lex.content, lex.line))
+        }
+    }
+
+    fn program(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut statements = Vec::new();
+        while self.tokens.peek().expect("skipped past EOF token").token != Token::Eof {
+            statements.push(self.statement()?);
+        }
+
+        let last_token = self.tokens.next().expect("skipped past EOF token").token;
+        assert_eq!(last_token, Token::Eof);
+
+        Ok(statements)
+    }
+
+    fn statement(&mut self) -> Result<Stmt, ParseError> {
+        let next_token = self.tokens.peek().expect("skipped past EOF token");
+        match next_token.token {
+            Token::Keyword(Keyword::Print) => {
+                self.tokens
+                    .next()
+                    .expect("peeked item already consumed");
+                let expr = self.expression()?;
+                self.ensure_next_token(Token::Semicolon, ParseErrorKind::ExpectedSemicolon)?;
+
+                Ok(Stmt::Print(expr))
+            }
+            Token::LeftBrace => {
+                todo!()
+            }
+            _ => {
+                let expr = self.expression()?;
+                self.ensure_next_token(Token::Semicolon, ParseErrorKind::ExpectedSemicolon)?;
+                Ok(Stmt::Expression(expr))
+            }
         }
     }
 
