@@ -299,6 +299,7 @@ where
             Token::True => Some(Expr::Literal(Literal::Boolean(true))),
             Token::False => Some(Expr::Literal(Literal::Boolean(false))),
             Token::Nil => Some(Expr::Literal(Literal::Nil)),
+            Token::Identifier(ident) => Some(Expr::Variable(ident.clone())),
             _ => None,
         };
 

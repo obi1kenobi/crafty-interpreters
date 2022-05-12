@@ -10,7 +10,7 @@ pub enum Expr {
     Grouping(Box<Expr>),
     Literal(Literal),
     Unary(Box<UnaryExpr>),
-    Identifier(Rc<str>),
+    Variable(Rc<str>),
     Assignment(Rc<str>, Box<Expr>),
 }
 

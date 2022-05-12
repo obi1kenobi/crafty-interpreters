@@ -154,7 +154,7 @@ impl Evaluate for Expr {
             Expr::Grouping(inner) => inner.eval(env),
             Expr::Literal(inner) => inner.eval(env),
             Expr::Binary(inner) => inner.eval(env),
-            Expr::Identifier(ident) => env.borrow().resolve(ident.as_ref()),
+            Expr::Variable(ident) => env.borrow().resolve(ident.as_ref()),
             Expr::Assignment(ident, expr) => {
                 let value = expr.eval(env)?;
                 env.borrow_mut().assign(ident.as_ref(), value.clone())?;
