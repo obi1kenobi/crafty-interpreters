@@ -14,6 +14,9 @@ pub mod stmt;
 fn main() {
     let content = r#"
         print true and !false and !(false and true) != 123 + 45 * 2;
+        var foo = 123
+        print 123;
+        print 123 + 456;
     "#;
     let scanner = Scanner::new(content);
     let mut parser = Parser::new(scanner);

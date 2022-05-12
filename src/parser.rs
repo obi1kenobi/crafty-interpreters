@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     expr::{BinaryExpr, Expr, Literal, UnaryExpr},
     scanner::Lexeme,
-    token::{Keyword, Token}, stmt::Stmt,
+    stmt::{Stmt, VarDeclaration},
+    token::{Keyword, Token},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ParseError {
     kind: ParseErrorKind,
     next_content: String,
@@ -29,7 +30,7 @@ impl ParseError {
 
 #[non_exhaustive]
 #[allow(clippy::enum_variant_names)]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, thiserror::Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
 pub enum ParseErrorKind {
     #[error("Expected ')' after expression.")]
     ExpectedRightParenAfterExpr,
@@ -39,6 +40,15 @@ pub enum ParseErrorKind {
 
     #[error("Expected ';' at the end of the statement.")]
     ExpectedSemicolon,
+
+    #[error("Expected variable name after 'var'.")]
+    ExpectedVariableName,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, derive_new::new)]
+pub struct ParseWithErrors {
+    partial_program: Vec<Stmt>,
+    errors: Vec<ParseError>,
 }
 
 pub struct Parser<'a, I>
@@ -86,7 +96,7 @@ where
         }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParseError> {
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParseWithErrors> {
         self.program()
     }
 
@@ -131,25 +141,83 @@ where
         }
     }
 
-    fn program(&mut self) -> Result<Vec<Stmt>, ParseError> {
+    fn program(&mut self) -> Result<Vec<Stmt>, ParseWithErrors> {
         let mut statements = Vec::new();
+        let mut errors = Vec::new();
         while self.tokens.peek().expect("skipped past EOF token").token != Token::Eof {
-            statements.push(self.statement()?);
+            match self.declaration() {
+                Ok(statement) => statements.push(statement),
+                Err(e) => {
+                    errors.push(e);
+                    self.synchronize();
+                }
+            }
         }
 
         let last_token = self.tokens.next().expect("skipped past EOF token").token;
         assert_eq!(last_token, Token::Eof);
 
-        Ok(statements)
+        if errors.is_empty() {
+            Ok(statements)
+        } else {
+            Err(ParseWithErrors::new(statements, errors))
+        }
+    }
+
+    fn declaration(&mut self) -> Result<Stmt, ParseError> {
+        let next_token = self.tokens.peek().expect("skipped past EOF token");
+        if let Token::Keyword(Keyword::Var) = next_token.token {
+            self.variable_declaration()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn variable_declaration(&mut self) -> Result<Stmt, ParseError> {
+        let next_token = self
+            .tokens
+            .next()
+            .expect("peeked item already consumed")
+            .token;
+        assert_eq!(next_token, Token::Keyword(Keyword::Var));
+
+        let next_lexeme = self.tokens.peek().expect("skipped past EOF token");
+        let identifier = match &next_lexeme.token {
+            Token::Identifier(ident) => {
+                let identifier = ident.clone();
+                self.tokens.next().expect("peeked item already consumed");
+                identifier
+            }
+            _ => {
+                return Err(ParseError::new(
+                    ParseErrorKind::ExpectedVariableName,
+                    next_lexeme.content,
+                    next_lexeme.line,
+                ));
+            }
+        };
+
+        let initializer =
+            if self.tokens.peek().expect("skipped past EOF token").token == Token::Equal {
+                self.tokens.next().expect("peeked item already consumed");
+                Some(self.expression()?)
+            } else {
+                None
+            };
+
+        self.ensure_next_token(Token::Semicolon, ParseErrorKind::ExpectedSemicolon)?;
+
+        Ok(Stmt::VarDeclaration(VarDeclaration::new(
+            identifier,
+            initializer,
+        )))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseError> {
         let next_token = self.tokens.peek().expect("skipped past EOF token");
         match next_token.token {
             Token::Keyword(Keyword::Print) => {
-                self.tokens
-                    .next()
-                    .expect("peeked item already consumed");
+                self.tokens.next().expect("peeked item already consumed");
                 let expr = self.expression()?;
                 self.ensure_next_token(Token::Semicolon, ParseErrorKind::ExpectedSemicolon)?;
 
