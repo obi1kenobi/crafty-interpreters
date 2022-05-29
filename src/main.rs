@@ -12,51 +12,7 @@ pub mod interpreter;
 pub mod stmt;
 
 fn main() {
-    let content = r#"
-        print "precedence and operations";
-        print "";
-        print true and !false and !(false and true) != 123 + 45 * 2;
-        var foo = 123;
-        print foo;
-        print foo + 456;
-
-        print "";
-        print "scopes test";
-        print "";
-        var a = "global a";
-        var b = "global b";
-        var c = "global c";
-        {
-        var a = "outer a";
-        var b = "outer b";
-        {
-            var a = "inner a";
-            print a;
-            print b;
-            print c;
-        }
-        print a;
-        print b;
-        print c;
-        }
-        print a;
-        print b;
-        print c;
-
-        print "";
-        print "nesting scopes";
-        print "";
-        var a = 1;
-        {
-            var a = a + 2;
-            print a;
-        }
-
-        print "";
-        print "empty block";
-        print "";
-        { }
-    "#;
+    let content = include_str!("lox_program.lox");
     let scanner = Scanner::new(content);
     let mut parser = Parser::new(scanner);
 

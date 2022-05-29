@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     expr::{BinaryExpr, Expr, Literal, UnaryExpr},
     scanner::Lexeme,
-    stmt::{Stmt, VarDeclaration},
+    stmt::{IfStatement, Stmt, VarDeclaration, WhileStatement},
     token::{Keyword, Token},
 };
 
@@ -46,6 +46,21 @@ pub enum ParseErrorKind {
 
     #[error("Expected variable name after 'var'.")]
     ExpectedVariableName,
+
+    #[error("Expected '(' after 'if'.")]
+    ExpectedLeftParenAfterIf,
+
+    #[error("Expected ')' after if condition.")]
+    ExpectedRightParentAfterIfCondition,
+
+    #[error("Expected '(' after 'while'.")]
+    ExpectedLeftParenAfterWhile,
+
+    #[error("Expected ')' after while condition.")]
+    ExpectedRightParentAfterWhileCondition,
+
+    #[error("Invalid assignment target.")]
+    InvalidAssignmentTarget,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, derive_new::new)]
@@ -226,6 +241,54 @@ where
 
                 Ok(Stmt::Print(expr))
             }
+            Token::Keyword(Keyword::If) => {
+                self.tokens.next().expect("peeked item already consumed");
+                self.ensure_next_token(Token::LeftParen, ParseErrorKind::ExpectedLeftParenAfterIf)?;
+
+                let condition = self.expression()?;
+
+                self.ensure_next_token(
+                    Token::RightParen,
+                    ParseErrorKind::ExpectedRightParentAfterIfCondition,
+                )?;
+
+                let then_branch = self.statement()?;
+                let else_branch = if let Token::Keyword(Keyword::Else) =
+                    self.tokens.peek().expect("skipped past EOF token").token
+                {
+                    self.tokens.next().expect("peeked item already consumed");
+                    Some(self.statement()?)
+                } else {
+                    None
+                };
+
+                Ok(Stmt::If(IfStatement::new(
+                    condition,
+                    Box::new(then_branch),
+                    Box::new(else_branch),
+                )))
+            }
+            Token::Keyword(Keyword::While) => {
+                self.tokens.next().expect("peeked item already consumed");
+                self.ensure_next_token(
+                    Token::LeftParen,
+                    ParseErrorKind::ExpectedLeftParenAfterWhile,
+                )?;
+
+                let condition = self.expression()?;
+
+                self.ensure_next_token(
+                    Token::RightParen,
+                    ParseErrorKind::ExpectedRightParentAfterWhileCondition,
+                )?;
+
+                let body = self.statement()?;
+
+                Ok(Stmt::While(WhileStatement::new(condition, Box::new(body))))
+            }
+            Token::Keyword(Keyword::For) => {
+                todo!()
+            }
             Token::LeftBrace => {
                 self.tokens.next().expect("peeked item already consumed");
                 let mut inner_statements = vec![];
@@ -233,12 +296,15 @@ where
                 loop {
                     let peeked_token = &self.tokens.peek().expect("skipped past EOF token").token;
                     if peeked_token == &Token::RightBrace || peeked_token == &Token::Eof {
-                        break peeked_token;
+                        break;
                     }
                     inner_statements.push(self.declaration()?);
-                };
+                }
 
-                self.ensure_next_token(Token::RightBrace, ParseErrorKind::ExpectedRightBraceAfterBlock)?;
+                self.ensure_next_token(
+                    Token::RightBrace,
+                    ParseErrorKind::ExpectedRightBraceAfterBlock,
+                )?;
 
                 Ok(Stmt::Block(inner_statements))
             }
@@ -251,7 +317,29 @@ where
     }
 
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.equality()?;
+
+        if self.tokens.peek().expect("skipped past EOF token").token == Token::Equal {
+            let lex = self.tokens.next().expect("peeked item already consumed");
+
+            let value = self.assignment()?;
+
+            if let Expr::Variable(var_name) = expr {
+                Ok(Expr::Assignment(var_name, Box::new(value)))
+            } else {
+                Err(ParseError::new(
+                    ParseErrorKind::InvalidAssignmentTarget,
+                    lex.content,
+                    lex.line,
+                ))
+            }
+        } else {
+            Ok(expr)
+        }
     }
 
     fn equality(&mut self) -> Result<Expr, ParseError> {

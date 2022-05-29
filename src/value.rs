@@ -82,7 +82,7 @@ impl Display for Value {
             Value::Number(n) => {
                 n.fmt(f)
             },
-            Value::String(s) => write!(f, "\"{}\"", s.as_ref()),
+            Value::String(s) => write!(f, "{}", s.as_ref()),
         }
     }
 }
