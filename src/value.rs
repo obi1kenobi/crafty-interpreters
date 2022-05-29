@@ -1,4 +1,4 @@
-use std::{rc::Rc, error::Error, fmt::Display};
+use std::{error::Error, fmt::Display, rc::Rc};
 
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +24,7 @@ impl Value {
     pub fn as_number(&self) -> Option<f64> {
         match self {
             Value::Number(n) => Some(*n),
-            _ => None
+            _ => None,
         }
     }
 
@@ -46,7 +46,7 @@ impl Value {
     pub fn as_str(&self) -> Option<&str> {
         match self {
             Value::String(s) => Some(s.as_ref()),
-            _ => None
+            _ => None,
         }
     }
 
@@ -79,9 +79,7 @@ impl Display for Value {
         match self {
             Value::Nil => write!(f, "nil"),
             Value::Boolean(b) => b.fmt(f),
-            Value::Number(n) => {
-                n.fmt(f)
-            },
+            Value::Number(n) => n.fmt(f),
             Value::String(s) => write!(f, "{}", s.as_ref()),
         }
     }
@@ -142,7 +140,7 @@ impl From<Nil> for Value {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, derive_new::new)]
 pub struct ConversionError {
     converting_from: Value,
-    kind: ConversionErrorKind
+    kind: ConversionErrorKind,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -164,7 +162,12 @@ impl ConversionErrorKind {
 
 impl Display for ConversionError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Could not coerce value {} to {}", self.converting_from, self.kind.conversion_to())
+        write!(
+            f,
+            "Could not coerce value {} to {}",
+            self.converting_from,
+            self.kind.conversion_to()
+        )
     }
 }
 
@@ -176,7 +179,10 @@ impl TryFrom<&Value> for Nil {
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         match value.as_nil() {
             Some(x) => Ok(x),
-            None => Err(ConversionError::new(value.clone(), ConversionErrorKind::ConversionToNil)),
+            None => Err(ConversionError::new(
+                value.clone(),
+                ConversionErrorKind::ConversionToNil,
+            )),
         }
     }
 }
@@ -187,7 +193,10 @@ impl TryFrom<Value> for Nil {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value.as_nil() {
             Some(x) => Ok(x),
-            _ => Err(ConversionError::new(value, ConversionErrorKind::ConversionToNil)),
+            _ => Err(ConversionError::new(
+                value,
+                ConversionErrorKind::ConversionToNil,
+            )),
         }
     }
 }
@@ -204,7 +213,10 @@ impl TryFrom<&Value> for f64 {
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         match value.as_number() {
             Some(n) => Ok(n),
-            None => Err(ConversionError::new(value.clone(), ConversionErrorKind::ConversionToNumber)),
+            None => Err(ConversionError::new(
+                value.clone(),
+                ConversionErrorKind::ConversionToNumber,
+            )),
         }
     }
 }
@@ -215,7 +227,10 @@ impl TryFrom<Value> for f64 {
     fn try_from(value: Value) -> Result<Self, Self::Error> {
         match value.as_number() {
             Some(n) => Ok(n),
-            None => Err(ConversionError::new(value, ConversionErrorKind::ConversionToNumber)),
+            None => Err(ConversionError::new(
+                value,
+                ConversionErrorKind::ConversionToNumber,
+            )),
         }
     }
 }
@@ -226,7 +241,10 @@ impl TryFrom<&Value> for Rc<str> {
     fn try_from(value: &Value) -> Result<Self, Self::Error> {
         match value.as_rc_str() {
             Some(s) => Ok(s.clone()),
-            None => Err(ConversionError::new(value.clone(), ConversionErrorKind::ConversionToString)),
+            None => Err(ConversionError::new(
+                value.clone(),
+                ConversionErrorKind::ConversionToString,
+            )),
         }
     }
 }
@@ -238,7 +256,10 @@ impl TryFrom<Value> for Rc<str> {
         // this converts directly to avoid an extraneous clone of the Rc
         match value {
             Value::String(s) => Ok(s),
-            _ => Err(ConversionError::new(value, ConversionErrorKind::ConversionToString)),
+            _ => Err(ConversionError::new(
+                value,
+                ConversionErrorKind::ConversionToString,
+            )),
         }
     }
 }

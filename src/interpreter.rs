@@ -315,7 +315,8 @@ impl Evaluate for Stmt {
                     if_stmt.then_branch.eval(env)?;
                     Ok(Value::Nil)
                 } else {
-                    if_stmt.else_branch
+                    if_stmt
+                        .else_branch
                         .as_ref()
                         .map_or(Ok(Value::Nil), |x| x.eval(env).map(|_| Value::Nil))
                 }

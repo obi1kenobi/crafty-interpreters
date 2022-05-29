@@ -311,14 +311,21 @@ where
                     _ => Some(self.expression()?.into()),
                 };
 
-                let condition = if self.tokens.peek().expect("skipped past EOF token").token == Token::Semicolon {
+                let condition = if self.tokens.peek().expect("skipped past EOF token").token
+                    == Token::Semicolon
+                {
                     Expr::Literal(Literal::Boolean(true))
                 } else {
                     self.expression()?
                 };
-                self.ensure_next_token(Token::Semicolon, ParseErrorKind::ExpectedSemicolonAfterLoopCondition)?;
+                self.ensure_next_token(
+                    Token::Semicolon,
+                    ParseErrorKind::ExpectedSemicolonAfterLoopCondition,
+                )?;
 
-                let increment = if self.tokens.peek().expect("skipped past EOF token").token == Token::RightParen {
+                let increment = if self.tokens.peek().expect("skipped past EOF token").token
+                    == Token::RightParen
+                {
                     None
                 } else {
                     Some(self.expression()?)
@@ -331,21 +338,13 @@ where
 
                 let mut body = self.statement()?;
                 if let Some(increment) = increment {
-                    body = Stmt::Block(vec![
-                        body,
-                        Stmt::Expression(increment),
-                    ]);
+                    body = Stmt::Block(vec![body, Stmt::Expression(increment)]);
                 }
 
-                body = Stmt::While(WhileStatement::new(
-                    condition, Box::new(body)
-                ));
+                body = Stmt::While(WhileStatement::new(condition, Box::new(body)));
 
                 if let Some(initializer) = initializer {
-                    body = Stmt::Block(vec![
-                        initializer,
-                        body,
-                    ]);
+                    body = Stmt::Block(vec![initializer, body]);
                 }
 
                 Ok(body)
@@ -404,21 +403,11 @@ where
     }
 
     fn logical_or(&mut self) -> Result<Expr, ParseError> {
-        binary_expression_impl!(
-            self,
-            tokens,
-            logical_and,
-            Token::Keyword(Keyword::Or)
-        )
+        binary_expression_impl!(self, tokens, logical_and, Token::Keyword(Keyword::Or))
     }
 
     fn logical_and(&mut self) -> Result<Expr, ParseError> {
-        binary_expression_impl!(
-            self,
-            tokens,
-            equality,
-            Token::Keyword(Keyword::And)
-        )
+        binary_expression_impl!(self, tokens, equality, Token::Keyword(Keyword::And))
     }
 
     fn equality(&mut self) -> Result<Expr, ParseError> {

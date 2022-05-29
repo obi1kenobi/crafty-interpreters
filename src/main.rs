@@ -1,15 +1,15 @@
 use ron::ser::PrettyConfig;
 
-use crate::{parser::Parser, scanner::Scanner, interpreter::Interpreter};
+use crate::{interpreter::Interpreter, parser::Parser, scanner::Scanner};
 
 mod expr;
+pub mod interpreter;
 mod parser;
 mod scanner;
+pub mod stmt;
 mod token;
 mod util;
 pub mod value;
-pub mod interpreter;
-pub mod stmt;
 
 fn main() {
     let content = include_str!("lox_program.lox");
