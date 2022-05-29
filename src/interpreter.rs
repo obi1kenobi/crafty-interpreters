@@ -1,11 +1,12 @@
-use std::{cell::RefCell, collections::BTreeMap, fmt::Display, rc::Rc, ops::{Deref}};
+use std::{cell::RefCell, collections::BTreeMap, fmt::Display, ops::Deref, rc::Rc};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
     expr::{BinaryExpr, Expr, Literal, UnaryExpr},
+    stmt::Stmt,
     token::{Keyword, Token},
-    value::{ConversionError, Value}, stmt::Stmt,
+    value::{ConversionError, Value},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default, derive_new::new)]
@@ -280,9 +281,7 @@ impl Evaluate for Stmt {
                 println!("{value}");
                 Ok(Value::Nil)
             }
-            Stmt::Expression(expr) => {
-                expr.eval(env).map(|_| Value::Nil)
-            }
+            Stmt::Expression(expr) => expr.eval(env).map(|_| Value::Nil),
             Stmt::VarDeclaration(decl) => {
                 let initial_value = if let Some(initializer) = &decl.initializer {
                     initializer.eval(env)?
@@ -299,6 +298,25 @@ impl Evaluate for Stmt {
                 }
                 Ok(Value::Nil)
             }
+            Stmt::If(if_stmt) => {
+                let condition = if_stmt.condition.eval(env)?;
+                if condition.as_bool() {
+                    if_stmt.then_branch.eval(env)?;
+                    Ok(Value::Nil)
+                } else {
+                    (*if_stmt.else_branch)
+                        .as_ref()
+                        .map_or(Ok(Value::Nil), |x| x.eval(env).map(|_| Value::Nil))
+                }
+            }
+            Stmt::While(while_stmt) => loop {
+                let condition = while_stmt.condition.eval(env)?;
+                if !condition.as_bool() {
+                    break Ok(Value::Nil);
+                }
+
+                while_stmt.body.eval(env)?;
+            },
         }
     }
 }
