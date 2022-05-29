@@ -64,3 +64,10 @@ while (cnt > 0) {
     cnt = cnt - 1;
     print "loop!";
 }
+
+print "";
+print "for loop";
+print "";
+for (var i = 0; i < 2; i = i + 1) {
+    print "loop!";
+}

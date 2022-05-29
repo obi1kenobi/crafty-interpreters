@@ -59,6 +59,15 @@ pub enum ParseErrorKind {
     #[error("Expected ')' after while condition.")]
     ExpectedRightParentAfterWhileCondition,
 
+    #[error("Expected '(' after 'for'.")]
+    ExpectedLeftParenAfterFor,
+
+    #[error("Expected ')' after for clauses.")]
+    ExpectedRightParentAfterForClauses,
+
+    #[error("Expected ';' after loop condition.")]
+    ExpectedSemicolonAfterLoopCondition,
+
     #[error("Invalid assignment target.")]
     InvalidAssignmentTarget,
 }
@@ -257,7 +266,7 @@ where
                     self.tokens.peek().expect("skipped past EOF token").token
                 {
                     self.tokens.next().expect("peeked item already consumed");
-                    Some(self.statement()?)
+                    Some(Box::new(self.statement()?))
                 } else {
                     None
                 };
@@ -265,7 +274,7 @@ where
                 Ok(Stmt::If(IfStatement::new(
                     condition,
                     Box::new(then_branch),
-                    Box::new(else_branch),
+                    else_branch,
                 )))
             }
             Token::Keyword(Keyword::While) => {
@@ -287,7 +296,59 @@ where
                 Ok(Stmt::While(WhileStatement::new(condition, Box::new(body))))
             }
             Token::Keyword(Keyword::For) => {
-                todo!()
+                self.tokens.next().expect("peeked item already consumed");
+                self.ensure_next_token(
+                    Token::LeftParen,
+                    ParseErrorKind::ExpectedLeftParenAfterFor,
+                )?;
+
+                let initializer = match self.tokens.peek().expect("skipped past EOF token").token {
+                    Token::Semicolon => {
+                        self.tokens.next().expect("peeked item already consumed");
+                        None
+                    }
+                    Token::Keyword(Keyword::Var) => Some(self.variable_declaration()?),
+                    _ => Some(self.expression()?.into()),
+                };
+
+                let condition = if self.tokens.peek().expect("skipped past EOF token").token == Token::Semicolon {
+                    Expr::Literal(Literal::Boolean(true))
+                } else {
+                    self.expression()?
+                };
+                self.ensure_next_token(Token::Semicolon, ParseErrorKind::ExpectedSemicolonAfterLoopCondition)?;
+
+                let increment = if self.tokens.peek().expect("skipped past EOF token").token == Token::RightParen {
+                    None
+                } else {
+                    Some(self.expression()?)
+                };
+
+                self.ensure_next_token(
+                    Token::RightParen,
+                    ParseErrorKind::ExpectedRightParentAfterForClauses,
+                )?;
+
+                let mut body = self.statement()?;
+                if let Some(increment) = increment {
+                    body = Stmt::Block(vec![
+                        body,
+                        Stmt::Expression(increment),
+                    ]);
+                }
+
+                body = Stmt::While(WhileStatement::new(
+                    condition, Box::new(body)
+                ));
+
+                if let Some(initializer) = initializer {
+                    body = Stmt::Block(vec![
+                        initializer,
+                        body,
+                    ]);
+                }
+
+                Ok(body)
             }
             Token::LeftBrace => {
                 self.tokens.next().expect("peeked item already consumed");

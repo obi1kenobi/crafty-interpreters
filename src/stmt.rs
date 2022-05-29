@@ -24,7 +24,7 @@ pub struct VarDeclaration {
 pub struct IfStatement {
     pub condition: Expr,
     pub then_branch: Box<Stmt>,
-    pub else_branch: Box<Option<Stmt>>,
+    pub else_branch: Option<Box<Stmt>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, derive_new::new)]
