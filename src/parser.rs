@@ -321,7 +321,7 @@ where
     }
 
     fn assignment(&mut self) -> Result<Expr, ParseError> {
-        let expr = self.equality()?;
+        let expr = self.logical_or()?;
 
         if self.tokens.peek().expect("skipped past EOF token").token == Token::Equal {
             let lex = self.tokens.next().expect("peeked item already consumed");
@@ -342,6 +342,24 @@ where
         }
     }
 
+    fn logical_or(&mut self) -> Result<Expr, ParseError> {
+        binary_expression_impl!(
+            self,
+            tokens,
+            logical_and,
+            Token::Keyword(Keyword::Or)
+        )
+    }
+
+    fn logical_and(&mut self) -> Result<Expr, ParseError> {
+        binary_expression_impl!(
+            self,
+            tokens,
+            equality,
+            Token::Keyword(Keyword::And)
+        )
+    }
+
     fn equality(&mut self) -> Result<Expr, ParseError> {
         binary_expression_impl!(
             self,
@@ -355,17 +373,8 @@ where
         binary_expression_impl!(
             self,
             tokens,
-            logical,
-            Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual
-        )
-    }
-
-    fn logical(&mut self) -> Result<Expr, ParseError> {
-        binary_expression_impl!(
-            self,
-            tokens,
             term,
-            Token::Keyword(Keyword::And | Keyword::Or)
+            Token::Greater | Token::GreaterEqual | Token::Less | Token::LessEqual
         )
     }
 

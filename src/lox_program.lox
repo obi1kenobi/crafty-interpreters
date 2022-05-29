@@ -8,6 +8,12 @@ print foo;
 print foo + 456;
 
 print "";
+print "short-circuiting";
+print "";
+print false and "and did not short-circuit!";
+print true or "or did not short-circuit!";
+
+print "";
 print "scopes test";
 print "";
 var a = "global a";

@@ -189,6 +189,24 @@ impl Evaluate for BinaryExpr {
     fn eval(&self, env: &mut Environment) -> Result<Value, RuntimeError> {
         // Execution is left-to-right.
         let left = self.left.eval(env)?;
+
+        // Check whether we're in a short-circuiting binary expression.
+        // If so, return early.
+        // If not, evaluate the right side and keep going.
+        match self.operator {
+            Token::Keyword(Keyword::And) => {
+                if !left.as_bool() {
+                    return Ok(left);
+                }
+            }
+            Token::Keyword(Keyword::Or) => {
+                if left.as_bool() {
+                    return Ok(left);
+                }
+            }
+            _ => {}
+        }
+
         let right = self.right.eval(env)?;
 
         match self.operator {
@@ -246,16 +264,9 @@ impl Evaluate for BinaryExpr {
             }
             Token::Keyword(Keyword::And | Keyword::Or) => {
                 // We are doing logical operations on booleans.
-                // TODO: Revisit this if it turns out that `and` and `or` should short-circuit.
-                //       Right now, they do not.
-                let left_bool = left.as_bool();
-                let right_bool = right.as_bool();
-
-                match self.operator {
-                    Token::Keyword(Keyword::And) => Ok(Value::Boolean(left_bool && right_bool)),
-                    Token::Keyword(Keyword::Or) => Ok(Value::Boolean(left_bool || right_bool)),
-                    _ => unreachable!(),
-                }
+                // We already determined that we didn't need to short-circuit earlier,
+                // so if we're here, then the result is always the right side's value.
+                Ok(right)
             }
             Token::EqualEqual | Token::BangEqual => {
                 // We are checking values for equality, all value types are allowed here.
