@@ -19,7 +19,7 @@ pub struct Clock;
 
 impl Display for Clock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<native fn>")
+        write!(f, "<native fn: clock>")
     }
 }
 
