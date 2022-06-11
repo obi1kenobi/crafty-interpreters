@@ -12,6 +12,7 @@ pub enum Expr {
     Unary(Box<UnaryExpr>),
     Variable(Rc<str>),
     Assignment(Rc<str>, Box<Expr>),
+    Call(Box<CallExpr>),
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -33,4 +34,10 @@ pub struct BinaryExpr {
     pub left: Expr,
     pub operator: Token,
     pub right: Expr,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CallExpr {
+    pub callee: Expr,
+    pub arguments: Vec<Expr>,
 }

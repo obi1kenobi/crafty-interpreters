@@ -2,7 +2,7 @@ use std::{error::Error, fmt::Display, rc::Rc};
 
 use serde::{Deserialize, Serialize};
 
-use crate::expr::Literal;
+use crate::{callable::Callable, expr::Literal};
 
 pub const NIL_TYPE: &str = "nil";
 pub const BOOLEAN_TYPE: &str = "bool";
@@ -12,12 +12,63 @@ pub const STRING_TYPE: &str = "string";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Nil;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub enum Value {
     Nil,
     Boolean(bool),
     Number(f64),
     String(Rc<str>),
+    Callable(Rc<dyn Callable>),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum SerializableValue {
+    Nil,
+    Boolean(bool),
+    Number(f64),
+    String(Rc<str>),
+}
+
+impl From<&Value> for SerializableValue {
+    fn from(v: &Value) -> Self {
+        match v {
+            Value::Nil => SerializableValue::Nil,
+            Value::Boolean(x) => SerializableValue::Boolean(*x),
+            Value::Number(x) => SerializableValue::Number(*x),
+            Value::String(x) => SerializableValue::String(x.clone()),
+            Value::Callable(_) => unreachable!(),
+        }
+    }
+}
+
+impl From<SerializableValue> for Value {
+    fn from(v: SerializableValue) -> Self {
+        match v {
+            SerializableValue::Nil => Value::Nil,
+            SerializableValue::Boolean(x) => Value::Boolean(x),
+            SerializableValue::Number(x) => Value::Number(x),
+            SerializableValue::String(x) => Value::String(x),
+        }
+    }
+}
+
+impl Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let serializable: SerializableValue = self.into();
+        serializable.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        SerializableValue::deserialize(deserializer).map(|x| x.into())
+    }
 }
 
 impl Value {
@@ -56,6 +107,20 @@ impl Value {
             _ => None,
         }
     }
+
+    pub fn as_rc_callable(&self) -> Option<&Rc<dyn Callable>> {
+        match self {
+            Value::Callable(c) => Some(c),
+            _ => None,
+        }
+    }
+
+    pub fn as_callable(&self) -> Option<&dyn Callable> {
+        match self {
+            Value::Callable(c) => Some(c.as_ref()),
+            _ => None,
+        }
+    }
 }
 
 impl PartialEq for Value {
@@ -81,6 +146,7 @@ impl Display for Value {
             Value::Boolean(b) => b.fmt(f),
             Value::Number(n) => n.fmt(f),
             Value::String(s) => write!(f, "{}", s.as_ref()),
+            Value::Callable(c) => c.fmt(f),
         }
     }
 }

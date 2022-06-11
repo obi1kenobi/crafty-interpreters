@@ -2,6 +2,7 @@ use ron::ser::PrettyConfig;
 
 use crate::{interpreter::Interpreter, parser::Parser, scanner::Scanner};
 
+pub mod callable;
 mod expr;
 pub mod interpreter;
 mod parser;

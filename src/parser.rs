@@ -5,7 +5,7 @@ use std::iter::Peekable;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    expr::{BinaryExpr, Expr, Literal, UnaryExpr},
+    expr::{BinaryExpr, CallExpr, Expr, Literal, UnaryExpr},
     scanner::Lexeme,
     stmt::{IfStatement, Stmt, VarDeclaration, WhileStatement},
     token::{Keyword, Token},
@@ -34,6 +34,9 @@ impl ParseError {
 pub enum ParseErrorKind {
     #[error("Expected ')' after expression.")]
     ExpectedRightParenAfterExpr,
+
+    #[error("Expected ')' after function call arguments.")]
+    ExpectedRightParenAfterArguments,
 
     #[error("Expected '}}' after block.")]
     ExpectedRightBraceAfterBlock,
@@ -70,6 +73,9 @@ pub enum ParseErrorKind {
 
     #[error("Invalid assignment target.")]
     InvalidAssignmentTarget,
+
+    #[error("No more than 255 arguments are allowed in a function call.")]
+    TooManyArguments,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, derive_new::new)]
@@ -451,7 +457,61 @@ where
             return Ok(Expr::Unary(Box::new(unary)));
         };
 
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Expr, ParseError> {
+        let mut expr = self.primary()?;
+
+        loop {
+            let next_token = self.tokens.peek().expect("peeked past EOF token");
+            if next_token.token == Token::LeftParen {
+                self.tokens.next().expect("peeked token already consumed");
+                expr = self.finish_call(expr)?;
+            } else {
+                break;
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, ParseError> {
+        let mut arguments = vec![];
+
+        let mut next_token = self.tokens.peek().expect("peeked past EOF token");
+        let mut next_content = next_token.content;
+        let mut next_line = next_token.line;
+        if next_token.token != Token::RightParen {
+            loop {
+                if arguments.len() > 255 {
+                    // TODO: Make this error not be fatal, we don't need to go into panic mode here.
+                    return Err(ParseError::new(
+                        ParseErrorKind::TooManyArguments,
+                        next_content,
+                        next_line,
+                    ));
+                } else {
+                    arguments.push(self.expression()?);
+                }
+
+                next_token = self.tokens.peek().expect("peeked past EOF token");
+                next_content = next_token.content;
+                next_line = next_token.line;
+                if next_token.token == Token::Comma {
+                    self.tokens.next().expect("peeked token already consumed");
+                } else {
+                    break;
+                }
+            }
+        }
+
+        self.ensure_next_token(
+            Token::RightParen,
+            ParseErrorKind::ExpectedRightParenAfterArguments,
+        )?;
+
+        Ok(Expr::Call(Box::new(CallExpr { callee, arguments })))
     }
 
     fn primary(&mut self) -> Result<Expr, ParseError> {

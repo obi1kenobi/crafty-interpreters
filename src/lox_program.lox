@@ -71,3 +71,8 @@ print "";
 for (var i = 0; i < 2; i = i + 1) {
     print "loop!";
 }
+
+print "";
+print "clock function";
+print "";
+print clock();

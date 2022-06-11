@@ -3,19 +3,28 @@ use std::{cell::RefCell, collections::BTreeMap, fmt::Display, ops::Deref, rc::Rc
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    callable::Clock,
     expr::{BinaryExpr, Expr, Literal, UnaryExpr},
     stmt::Stmt,
     token::{Keyword, Token},
     value::{ConversionError, Value},
 };
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default, derive_new::new)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Interpreter {
-    #[new(default)]
     globals: Environment,
 }
 
 impl Interpreter {
+    pub fn new() -> Self {
+        let globals = Environment::default();
+        globals
+            .borrow_mut()
+            .define(Rc::from("clock"), Value::Callable(Rc::new(Clock)));
+
+        Self { globals }
+    }
+
     pub fn evaluate_expr(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         expr.eval(&mut self.globals)
     }
@@ -117,6 +126,12 @@ pub enum RuntimeErrorKind {
 
     #[error("Undefined variable: {0}")]
     UndefinedVariable(String),
+
+    #[error("Can only call functions and classes.")]
+    CalledNonCallable,
+
+    #[error("Expected {0} arguments for function call, but got {1} arguments instead.")]
+    IncorrectNumberOfArguments(usize, usize),
 }
 
 impl Display for RuntimeError {
@@ -160,6 +175,27 @@ impl Evaluate for Expr {
                 let value = expr.eval(env)?;
                 env.borrow_mut().assign(ident.as_ref(), value.clone())?;
                 Ok(value)
+            }
+            Expr::Call(inner) => {
+                let callee = inner.callee.eval(env)?;
+                let maybe_arguments: Result<Vec<Value>, RuntimeError> =
+                    inner.arguments.iter().map(|arg| arg.eval(env)).collect();
+                let arguments = maybe_arguments?;
+
+                if let Some(callable) = callee.as_callable() {
+                    if callable.arity() == arguments.len() {
+                        callable.call(env, arguments)
+                    } else {
+                        Err(RuntimeError::new(
+                            RuntimeErrorKind::IncorrectNumberOfArguments(
+                                callable.arity(),
+                                arguments.len(),
+                            ),
+                        ))
+                    }
+                } else {
+                    Err(RuntimeError::new(RuntimeErrorKind::CalledNonCallable))
+                }
             }
         }
     }
